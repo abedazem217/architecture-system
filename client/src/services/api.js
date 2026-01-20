@@ -1,10 +1,37 @@
-import axios from 'axios';
+import axios from "axios";
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // يمكنك تغييره لاحقًا عند النشر
+  baseURL: "http://localhost:5000/api",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
+
+/* ✅ Request Interceptor
+   يضيف التوكن تلقائيًا مع كل request */
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+/* ✅ Response Interceptor
+   لو التوكن انتهى → Logout تلقائي */
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/";
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

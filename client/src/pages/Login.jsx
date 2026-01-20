@@ -1,58 +1,63 @@
-import React, { useState } from 'react';
-import api from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+export default function Login() {
   const navigate = useNavigate();
+  const { isAuthenticated, login } = useAuth();
 
-  const handleLogin = async (e) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (isAuthenticated) navigate("/dashboard");
+  }, [isAuthenticated, navigate]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage('');
+    setMsg("");
 
     try {
-      const res = await api.post('/auth/login', { email, password });
-
-      // Store token in localStorage
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data));
-
-      setMessage('✅ Login successful!');
-      navigate('/dashboard'); // We'll create this page later
+      await login({ email, password });
+      navigate("/dashboard");
     } catch (err) {
-      console.error(err);
-      setMessage('❌ Login failed. Please check your credentials.');
+      const apiMsg = err?.response?.data?.message;
+      setMsg(apiMsg || "Login failed");
     }
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '100px auto', textAlign: 'center' }}>
+    <div style={{ maxWidth: 400, margin: "80px auto" }}>
       <h2>Login</h2>
-      <form onSubmit={handleLogin}>
+
+      <form onSubmit={handleSubmit}>
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-        /><br /><br />
+        />
+        <br /><br />
+
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-        /><br /><br />
+        />
+        <br /><br />
+
         <button type="submit">Login</button>
       </form>
-      <p>
-          Don't have an account? <a href="/register">Register</a>
+
+      <p style={{ marginTop: 12 }}>
+        No account? <Link to="/register">Register</Link>
       </p>
-      {message && <p style={{ marginTop: '20px', color: message.includes('✅') ? 'green' : 'red' }}>{message}</p>}
+
+      {msg && <p style={{ marginTop: 12, color: "crimson" }}>{msg}</p>}
     </div>
   );
-};
-
-export default Login;
+}

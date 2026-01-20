@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
-import api from '../services/api';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Register = () => {
+  const navigate = useNavigate();
+  const { register } = useAuth();
+
   const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: ''
+    name: "",
+    email: "",
+    password: "",
   });
 
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -16,20 +20,22 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage('');
+    setMessage("");
 
     try {
-      const res = await api.post('/auth/register', form);
-      setMessage(`✅ Welcome, ${res.data.name}`);
+      const res = await register(form);
+      setMessage(`✅ Welcome, ${res.name}`);
+      navigate("/dashboard");
     } catch (err) {
-      console.error(err);
-      setMessage('❌ Registration failed.');
+      const apiMsg = err?.response?.data?.message;
+      setMessage(apiMsg || "❌ Registration failed.");
     }
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '100px auto', textAlign: 'center' }}>
+    <div style={{ maxWidth: "400px", margin: "100px auto", textAlign: "center" }}>
       <h2>Register</h2>
+
       <form onSubmit={handleSubmit}>
         <input
           type="text"
@@ -38,7 +44,9 @@ const Register = () => {
           value={form.name}
           onChange={handleChange}
           required
-        /><br /><br />
+        />
+        <br /><br />
+
         <input
           type="email"
           name="email"
@@ -46,7 +54,9 @@ const Register = () => {
           value={form.email}
           onChange={handleChange}
           required
-        /><br /><br />
+        />
+        <br /><br />
+
         <input
           type="password"
           name="password"
@@ -54,13 +64,21 @@ const Register = () => {
           value={form.password}
           onChange={handleChange}
           required
-        /><br /><br />
+        />
+        <br /><br />
+
         <button type="submit">Register</button>
       </form>
-      <p>
-           Already have an account? <a href="/">login</a>        
+
+      <p style={{ marginTop: 12 }}>
+        Already have an account? <Link to="/">Login</Link>
       </p>
-      {message && <p style={{ marginTop: '20px', color: 'green' }}>{message}</p>}
+
+      {message && (
+        <p style={{ marginTop: 20, color: message.startsWith("✅") ? "green" : "crimson" }}>
+          {message}
+        </p>
+      )}
     </div>
   );
 };

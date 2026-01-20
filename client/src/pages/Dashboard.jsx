@@ -1,42 +1,69 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
+
+function loadProjects() {
+  try {
+    return JSON.parse(localStorage.getItem("projects") || "[]");
+  } catch {
+    return [];
+  }
+}
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : null;
+  const projects = useMemo(() => loadProjects(), []);
+  const total = projects.length;
+  const active = projects.filter((p) => p.status === "Active").length;
+  const onHold = projects.filter((p) => p.status === "On Hold").length;
+  const completed = projects.filter((p) => p.status === "Completed").length;
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/', { replace: true });
+  const card = {
+    padding: 16,
+    border: "1px solid #eee",
+    borderRadius: 12,
+    background: "#fff",
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: '40px auto', fontFamily: 'Arial' }}>
-      <h2>Dashboard</h2>
-      <p style={{ marginTop: 10 }}>
-        {user ? `Welcome, ${user.name} (${user.email})` : 'Welcome'}
-      </p>
+    <div style={{ maxWidth: 900, margin: "24px auto", fontFamily: "Arial" }}>
+      <h2 style={{ marginTop: 0 }}>Dashboard</h2>
 
-   <div style={{ marginTop: 20, padding: 16, border: "1px solid #ddd", borderRadius: 8 }}>
-  <h3>Modules</h3>
-  <ul>
-    <li>Projects: create + update status</li>
-    <li>Documents: add/list (demo)</li>
-    <li>Meetings: schedule/list (demo)</li>
-  </ul>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        <div style={card}>
+          <div style={{ color: "#666" }}>Total Projects</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{total}</div>
+        </div>
+        <div style={card}>
+          <div style={{ color: "#666" }}>Active</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{active}</div>
+        </div>
+        <div style={card}>
+          <div style={{ color: "#666" }}>On Hold</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{onHold}</div>
+        </div>
+        <div style={card}>
+          <div style={{ color: "#666" }}>Completed</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{completed}</div>
+        </div>
+      </div>
 
-  <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-    <button onClick={() => navigate("/projects")}>Open Projects</button>
-    <button onClick={() => navigate("/documents")}>Open Documents</button>
-    <button onClick={() => navigate("/meetings")}>Open Meetings</button>
-  </div>
-</div>
+      <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <Link to="/projects" style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 10, textDecoration: "none" }}>
+          Manage Projects →
+        </Link>
+        <Link to="/documents" style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 10, textDecoration: "none" }}>
+          Documents →
+        </Link>
+        <Link to="/meetings" style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 10, textDecoration: "none" }}>
+          Meetings →
+        </Link>
+      </div>
 
-      <button onClick={handleLogout} style={{ marginTop: 20 }}>
-        Logout
-      </button>
+      <div style={{ marginTop: 16, padding: 16, border: "1px solid #eee", borderRadius: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Today</h3>
+        <div style={{ color: "#666" }}>
+          This section can later show: upcoming meetings, latest documents, and recent activity.
+        </div>
+      </div>
     </div>
   );
 }

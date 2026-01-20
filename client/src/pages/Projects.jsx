@@ -1,104 +1,142 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-
-const STORAGE_KEY = "projects";
-
-function loadProjects() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-
-function saveProjects(projects) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-}
+import api from "../services/api";
 
 export default function Projects() {
   const [projects, setProjects] = useState([]);
-  const [title, setTitle] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [status, setStatus] = useState("Planning");
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+
+  const [form, setForm] = useState({
+    name: "",
+    client: "",
+    status: "Active",
+    deadline: "",
+  });
+
+  const fetchProjects = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/projects");
+      setProjects(res.data);
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setProjects(loadProjects());
+    fetchProjects();
   }, []);
 
-  const canAdd = useMemo(() => title.trim() && clientName.trim(), [title, clientName]);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => {
+      return (
+        (p.name || "").toLowerCase().includes(q) ||
+        (p.client || "").toLowerCase().includes(q) ||
+        (p.status || "").toLowerCase().includes(q)
+      );
+    });
+  }, [projects, query]);
 
-  const handleAdd = (e) => {
+  const addProject = async (e) => {
     e.preventDefault();
-    if (!canAdd) return;
+    if (!form.name.trim()) return alert("Project name is required");
 
-    const newProject = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      clientName: clientName.trim(),
-      status,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const res = await api.post("/projects", form);
+      setProjects((prev) => [res.data, ...prev]);
+      setForm({ name: "", client: "", status: "Active", deadline: "" });
+    } catch (e2) {
+      alert(e2?.response?.data?.message || "Create failed");
+    }
+  };
 
-    const next = [newProject, ...projects];
-    setProjects(next);
-    saveProjects(next);
-
-    setTitle("");
-    setClientName("");
-    setStatus("Planning");
+  const deleteProject = async (id) => {
+    if (!window.confirm("Delete this project?")) return;
+    try {
+      await api.delete(`/projects/${id}`);
+      setProjects((prev) => prev.filter((p) => p._id !== id));
+    } catch (e) {
+      alert(e?.response?.data?.message || "Delete failed");
+    }
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "24px auto", fontFamily: "Arial", padding: 12 }}>
-      <h2>Projects</h2>
+    <div style={{ maxWidth: 900, margin: "24px auto", padding: 12 }}>
+      <h2 style={{ marginTop: 0 }}>Projects</h2>
 
-      <form onSubmit={handleAdd} style={{ marginTop: 16, padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
-        <h3>Add Project</h3>
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <input
+          placeholder="Search (name/client/status)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <button onClick={fetchProjects}>Refresh</button>
+      </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          <input
-            placeholder="Project title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <input
-            placeholder="Client name"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-          />
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="Planning">Planning</option>
-            <option value="Design">Design</option>
-            <option value="Licensing">Licensing</option>
-            <option value="Execution">Execution</option>
-            <option value="Done">Done</option>
-          </select>
-
-          <button type="submit" disabled={!canAdd}>
-            Add
-          </button>
-        </div>
+      <form onSubmit={addProject} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <input
+          placeholder="Project name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
+        />
+        <input
+          placeholder="Client"
+          value={form.client}
+          onChange={(e) => setForm({ ...form, client: e.target.value })}
+        />
+        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          <option>Active</option>
+          <option>On Hold</option>
+          <option>Completed</option>
+        </select>
+        <input
+          type="date"
+          value={form.deadline}
+          onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+        />
+        <button type="submit">Add</button>
       </form>
 
-      <div style={{ marginTop: 20 }}>
-        {projects.length === 0 ? (
-          <p>No projects yet. Add your first project.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {projects.map((p) => (
-              <div key={p.id} style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: "bold" }}>{p.title}</div>
-                    <div style={{ fontSize: 14 }}>Client: {p.clientName}</div>
-                    <div style={{ fontSize: 14 }}>Status: {p.status}</div>
-                  </div>
-                  <div style={{ alignSelf: "center" }}>
-                    <Link to={`/projects/${p.id}`}>Open</Link>
-                  </div>
+      <hr style={{ margin: "16px 0" }} />
+
+      {loading ? (
+        <div>Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div>No projects yet.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {filtered.map((p) => (
+            <div
+              key={p._id}
+              style={{
+                border: "1px solid #eee",
+                borderRadius: 10,
+                padding: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700 }}>{p.name}</div>
+                <div style={{ opacity: 0.8, fontSize: 14 }}>
+                  Client: {p.client || "-"} | Status: {p.status || "-"} | Deadline: {p.deadline || "-"}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <Link to={`/projects/${p._id}`}>Open</Link>
+              <button onClick={() => deleteProject(p._id)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

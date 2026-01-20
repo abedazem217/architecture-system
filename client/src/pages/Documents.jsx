@@ -81,9 +81,10 @@ export default function Documents() {
             <label style={{ display: "block", marginBottom: 8 }}>Select Project</label>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title} — {p.clientName}
-                </option>
+               <option key={p.id} value={p.id}>
+  {p.name} — {p.client || "—"}
+</option>
+
               ))}
             </select>
           </div>
