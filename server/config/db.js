@@ -1,8 +1,9 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/architect-office';
+    await mongoose.connect(uri);
     console.log('✅ MongoDB connected successfully');
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
@@ -10,4 +11,4 @@ const connectDB = async () => {
   }
 };
 
-module.exports = connectDB;
+export default connectDB;

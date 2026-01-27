@@ -1,119 +1,525 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import api from "../services/api";
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  Container,
+  Paper,
+  Box,
+  Typography,
+  Button,
+  TextField,
+  Grid,
+  Card,
+  CardContent,
+  Chip,
+  Alert,
+  CircularProgress,
+  Tabs,
+  Tab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  LinearProgress,
+} from '@mui/material';
+import {
+  ArrowBack,
+  Edit,
+  Delete,
+  Save,
+  Close,
+  Info,
+  FolderOpen,
+  MoreVert,
+} from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext.jsx';
+import { projectAPI } from '../services/api.js';
+
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 export default function ProjectDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isArchitect } = useAuth();
 
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [tabValue, setTabValue] = useState(0);
+  const [editMode, setEditMode] = useState(false);
 
-  const [status, setStatus] = useState("Active");
-  const [note, setNote] = useState("");
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    status: 'planning',
+    phase: 'planning',
+    startDate: '',
+    endDate: '',
+    budget: '',
+    location: '',
+  });
 
-  const fetchProject = async () => {
-    setLoading(true);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+
+  useEffect(() => {
+    loadProjectDetails();
+  }, [id]);
+
+  const loadProjectDetails = async () => {
     try {
-      const res = await api.get(`/projects/${id}`);
-      setProject(res.data);
-      setStatus(res.data.status || "Active");
-    } catch (e) {
-      alert(e?.response?.data?.message || "Failed to load project");
-      navigate("/projects");
+      setLoading(true);
+      const response = await projectAPI.getById(id);
+      const proj = response.data.data;
+      setProject(proj);
+      setFormData({
+        title: proj.title || '',
+        description: proj.description || '',
+        status: proj.status || 'planning',
+        phase: proj.phase || 'planning',
+        startDate: proj.startDate?.split('T')[0] || '',
+        endDate: proj.endDate?.split('T')[0] || '',
+        budget: proj.budget || '',
+        location: proj.location || '',
+      });
+      setError('');
+    } catch (err) {
+      setError('Failed to load project');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchProject();
-    // eslint-disable-next-line
-  }, [id]);
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
-  const updateStatus = async () => {
+  const handleUpdateProject = async () => {
     try {
-      const res = await api.put(`/projects/${id}`, { status });
-      setProject(res.data);
-      alert("Saved ✅");
-    } catch (e) {
-      alert(e?.response?.data?.message || "Update failed");
+      const response = await projectAPI.update(id, formData);
+      setProject(response.data.data);
+      setEditMode(false);
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update project');
     }
   };
 
-  const addNote = async (e) => {
-    e.preventDefault();
-    if (!note.trim()) return;
-
+  const handleDeleteProject = async () => {
     try {
-      const res = await api.put(`/projects/${id}`, { note });
-      setProject(res.data);
-      setNote("");
-    } catch (e) {
-      alert(e?.response?.data?.message || "Add note failed");
+      await projectAPI.delete(id);
+      navigate('/projects');
+    } catch (err) {
+      setError('Failed to delete project');
     }
   };
 
-  const deleteProject = async () => {
-    if (!window.confirm("Delete this project?")) return;
-    try {
-      await api.delete(`/projects/${id}`);
-      navigate("/projects");
-    } catch (e) {
-      alert(e?.response?.data?.message || "Delete failed");
-    }
+  const getStatusColor = (status) => {
+    const colors = {
+      planning: 'info',
+      licensed: 'success',
+      in_progress: 'warning',
+      completed: 'success',
+      on_hold: 'error',
+    };
+    return colors[status] || 'default';
   };
 
-  if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
-  if (!project) return null;
+  const getPhaseColor = (phase) => {
+    const colors = {
+      planning: 'default',
+      licensing: 'info',
+      construction: 'warning',
+      completion: 'success',
+    };
+    return colors[phase] || 'default';
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!project) {
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Alert severity="error">Project not found</Alert>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/projects')} sx={{ mt: 2 }}>
+          Back to Projects
+        </Button>
+      </Container>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 900, margin: "24px auto", padding: 12 }}>
-      <Link to="/projects">← Back</Link>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" gap={2} mb={3}>
+        <Button
+          startIcon={<ArrowBack />}
+          onClick={() => navigate('/projects')}
+          variant="text"
+        >
+          Back
+        </Button>
+        <Box flex={1}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+            {project.title}
+          </Typography>
+        </Box>
+        {isArchitect && (
+          <Box display="flex" gap={1}>
+            <Button
+              variant={editMode ? 'contained' : 'outlined'}
+              startIcon={editMode ? <Close /> : <Edit />}
+              onClick={() => setEditMode(!editMode)}
+            >
+              {editMode ? 'Cancel' : 'Edit'}
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={() => setOpenDeleteDialog(true)}
+            >
+              Delete
+            </Button>
+          </Box>
+        )}
+      </Box>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ marginBottom: 6 }}>{project.name}</h2>
-        <button onClick={deleteProject}>Delete</button>
-      </div>
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
-      <div style={{ opacity: 0.85 }}>
-        Client: {project.client || "-"} | Deadline: {project.deadline || "-"}
-      </div>
+      {/* Project Status */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={3}>
+            <Box>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Status
+              </Typography>
+              <Chip
+                label={project.status?.toUpperCase()}
+                color={getStatusColor(project.status)}
+              />
+            </Box>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Phase
+              </Typography>
+              <Chip
+                label={project.phase?.replace(/_/g, ' ').toUpperCase()}
+                color={getPhaseColor(project.phase)}
+              />
+            </Box>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Budget
+              </Typography>
+              <Typography variant="h6">
+                ${Number(project.budget || 0).toLocaleString()}
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Location
+              </Typography>
+              <Typography variant="body2">{project.location || 'N/A'}</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
 
-      <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
-        <label>Status:</label>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option>Active</option>
-          <option>On Hold</option>
-          <option>Completed</option>
-        </select>
-        <button onClick={updateStatus}>Save</button>
-      </div>
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+          <Tab label="Overview" id="tab-0" aria-controls="tabpanel-0" />
+          <Tab label="Details" id="tab-1" aria-controls="tabpanel-1" />
+          <Tab label="Team" id="tab-2" aria-controls="tabpanel-2" />
+        </Tabs>
+      </Paper>
 
-      <hr style={{ margin: "16px 0" }} />
+      {/* Overview Tab */}
+      <TabPanel value={tabValue} index={0}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Project Description
+                </Typography>
+                <Typography variant="body2" color="textSecondary" paragraph>
+                  {project.description || 'No description provided'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
 
-      <h3 style={{ marginTop: 0 }}>Notes</h3>
-      <form onSubmit={addNote} style={{ display: "flex", gap: 10 }}>
-        <input
-          placeholder="Write a note..."
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <button type="submit">Add</button>
-      </form>
+          <Grid item xs={12} md={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Timeline
+                </Typography>
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Start Date
+                  </Typography>
+                  <Typography variant="body2">
+                    {project.startDate
+                      ? new Date(project.startDate).toLocaleDateString()
+                      : 'N/A'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    End Date
+                  </Typography>
+                  <Typography variant="body2">
+                    {project.endDate
+                      ? new Date(project.endDate).toLocaleDateString()
+                      : 'N/A'}
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
 
-      <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        {(project.notes || []).map((n) => (
-          <div key={n._id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
-            <div>{n.text}</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
-            </div>
-          </div>
-        ))}
-        {(project.notes || []).length === 0 && <div>No notes yet.</div>}
-      </div>
-    </div>
+      {/* Details Tab - Edit Mode */}
+      <TabPanel value={tabValue} index={1}>
+        {editMode ? (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Edit Project
+            </Typography>
+            <Box display="grid" gap={2} mt={2}>
+              <TextField
+                fullWidth
+                label="Project Title"
+                name="title"
+                value={formData.title}
+                onChange={handleFormChange}
+              />
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                value={formData.description}
+                onChange={handleFormChange}
+                multiline
+                rows={4}
+              />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Start Date"
+                    name="startDate"
+                    type="date"
+                    value={formData.startDate}
+                    onChange={handleFormChange}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="End Date"
+                    name="endDate"
+                    type="date"
+                    value={formData.endDate}
+                    onChange={handleFormChange}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              </Grid>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Budget"
+                    name="budget"
+                    type="number"
+                    value={formData.budget}
+                    onChange={handleFormChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Location"
+                    name="location"
+                    value={formData.location}
+                    onChange={handleFormChange}
+                  />
+                </Grid>
+              </Grid>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Status"
+                    name="status"
+                    value={formData.status}
+                    onChange={handleFormChange}
+                    SelectProps={{ native: true }}
+                  >
+                    <option value="planning">Planning</option>
+                    <option value="licensed">Licensed</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_hold">On Hold</option>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Phase"
+                    name="phase"
+                    value={formData.phase}
+                    onChange={handleFormChange}
+                    SelectProps={{ native: true }}
+                  >
+                    <option value="planning">Planning</option>
+                    <option value="licensing">Licensing</option>
+                    <option value="construction">Construction</option>
+                    <option value="completion">Completion</option>
+                  </TextField>
+                </Grid>
+              </Grid>
+              <Button
+                variant="contained"
+                startIcon={<Save />}
+                onClick={handleUpdateProject}
+                size="large"
+              >
+                Save Changes
+              </Button>
+            </Box>
+          </Paper>
+        ) : (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Start Date
+                  </Typography>
+                  <Typography variant="body2">
+                    {project.startDate
+                      ? new Date(project.startDate).toLocaleDateString()
+                      : 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    End Date
+                  </Typography>
+                  <Typography variant="body2">
+                    {project.endDate
+                      ? new Date(project.endDate).toLocaleDateString()
+                      : 'N/A'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        )}
+      </TabPanel>
+
+      {/* Team Tab */}
+      <TabPanel value={tabValue} index={2}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Architect
+                </Typography>
+                <Typography variant="body2">
+                  {project.architect?.name || 'N/A'}
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  {project.architect?.email}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Client
+                </Typography>
+                <Typography variant="body2">
+                  {project.client?.name || 'N/A'}
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  {project.client?.email}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Delete Dialog */}
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+        <DialogTitle>Delete Project?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this project? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteProject}
+            variant="contained"
+            color="error"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
 }

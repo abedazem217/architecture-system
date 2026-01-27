@@ -1,142 +1,368 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import api from "../services/api";
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Container,
+  Paper,
+  TextField,
+  Button,
+  Box,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  CircularProgress,
+  Chip,
+  Grid,
+} from '@mui/material';
+import { Add, Edit, Delete, Visibility } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext.jsx';
+import { projectAPI } from '../services/api.js';
 
 export default function Projects() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user, isArchitect } = useAuth();
 
-  const [form, setForm] = useState({
-    name: "",
-    client: "",
-    status: "Active",
-    deadline: "",
+  const [projects, setProjects] = useState([]);
+  const [filteredProjects, setFilteredProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const [openDialog, setOpenDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    clientId: '',
+    location: '',
+    budget: '',
+    status: 'planning',
   });
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    // Filter projects based on search and status
+    let filtered = projects;
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (p) =>
+          p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          p.location?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((p) => p.status === statusFilter);
+    }
+
+    setFilteredProjects(filtered);
+  }, [projects, searchTerm, statusFilter]);
+
+  const loadProjects = async () => {
     try {
-      const res = await api.get("/projects");
-      setProjects(res.data);
-    } catch (e) {
-      alert(e?.response?.data?.message || "Failed to load projects");
+      setLoading(true);
+      const response = await projectAPI.getAll({ limit: 50 });
+      setProjects(response.data.data || []);
+      setError('');
+    } catch (err) {
+      setError('Failed to load projects');
+      console.error('Error loading projects:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return projects;
-    return projects.filter((p) => {
-      return (
-        (p.name || "").toLowerCase().includes(q) ||
-        (p.client || "").toLowerCase().includes(q) ||
-        (p.status || "").toLowerCase().includes(q)
-      );
+  const handleOpenDialog = () => {
+    setFormData({
+      title: '',
+      description: '',
+      clientId: '',
+      location: '',
+      budget: '',
+      status: 'planning',
     });
-  }, [projects, query]);
+    setOpenDialog(true);
+  };
 
-  const addProject = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) return alert("Project name is required");
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
 
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleCreateProject = async () => {
     try {
-      const res = await api.post("/projects", form);
-      setProjects((prev) => [res.data, ...prev]);
-      setForm({ name: "", client: "", status: "Active", deadline: "" });
-    } catch (e2) {
-      alert(e2?.response?.data?.message || "Create failed");
+      if (!formData.title || !formData.description) {
+        setError('Please fill in required fields');
+        return;
+      }
+
+      const response = await projectAPI.create(formData);
+      setProjects([...projects, response.data.data]);
+      handleCloseDialog();
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create project');
     }
   };
 
-  const deleteProject = async (id) => {
-    if (!window.confirm("Delete this project?")) return;
+  const handleDeleteProject = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this project?')) return;
+
     try {
-      await api.delete(`/projects/${id}`);
-      setProjects((prev) => prev.filter((p) => p._id !== id));
-    } catch (e) {
-      alert(e?.response?.data?.message || "Delete failed");
+      await projectAPI.delete(id);
+      setProjects(projects.filter((p) => p._id !== id));
+    } catch (err) {
+      setError('Failed to delete project');
     }
   };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      planning: 'info',
+      licensed: 'success',
+      in_progress: 'warning',
+      completed: 'success',
+      on_hold: 'error',
+    };
+    return colors[status] || 'default';
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 900, margin: "24px auto", padding: 12 }}>
-      <h2 style={{ marginTop: 0 }}>Projects</h2>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      {/* Header */}
+      <Box mb={3}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+          Projects
+        </Typography>
+        <Typography color="textSecondary">
+          Manage and track all your architectural projects
+        </Typography>
+      </Box>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-        <input
-          placeholder="Search (name/client/status)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <button onClick={fetchProjects}>Refresh</button>
-      </div>
-
-      <form onSubmit={addProject} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <input
-          placeholder="Project name"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          required
-        />
-        <input
-          placeholder="Client"
-          value={form.client}
-          onChange={(e) => setForm({ ...form, client: e.target.value })}
-        />
-        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-          <option>Active</option>
-          <option>On Hold</option>
-          <option>Completed</option>
-        </select>
-        <input
-          type="date"
-          value={form.deadline}
-          onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-        />
-        <button type="submit">Add</button>
-      </form>
-
-      <hr style={{ margin: "16px 0" }} />
-
-      {loading ? (
-        <div>Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div>No projects yet.</div>
-      ) : (
-        <div style={{ display: "grid", gap: 10 }}>
-          {filtered.map((p) => (
-            <div
-              key={p._id}
-              style={{
-                border: "1px solid #eee",
-                borderRadius: 10,
-                padding: 12,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700 }}>{p.name}</div>
-                <div style={{ opacity: 0.8, fontSize: 14 }}>
-                  Client: {p.client || "-"} | Status: {p.status || "-"} | Deadline: {p.deadline || "-"}
-                </div>
-              </div>
-
-              <Link to={`/projects/${p._id}`}>Open</Link>
-              <button onClick={() => deleteProject(p._id)}>Delete</button>
-            </div>
-          ))}
-        </div>
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
       )}
-    </div>
+
+      {/* Search & Filter */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              select
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              size="small"
+              SelectProps={{ native: true }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="planning">Planning</option>
+              <option value="licensed">Licensed</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="on_hold">On Hold</option>
+            </TextField>
+          </Grid>
+          {isArchitect && (
+            <Grid item xs={12} sm={6} md={4}>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleOpenDialog}
+              >
+                New Project
+              </Button>
+            </Grid>
+          )}
+        </Grid>
+      </Paper>
+
+      {/* Projects Table */}
+      {filteredProjects.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="textSecondary">No projects found</Typography>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 'bold' }}>Title</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Location</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Phase</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Budget</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredProjects.map((project) => (
+                <TableRow key={project._id} hover>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {project.title}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>{project.location || '-'}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={project.status}
+                      color={getStatusColor(project.status)}
+                      variant="outlined"
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                      {project.phase}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {project.budget ? `$${project.budget.toLocaleString()}` : '-'}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Button
+                      size="small"
+                      startIcon={<Visibility />}
+                      onClick={() => navigate(`/projects/${project._id}`)}
+                    >
+                      View
+                    </Button>
+                    {isArchitect && (
+                      <>
+                        <Button
+                          size="small"
+                          startIcon={<Edit />}
+                          sx={{ ml: 1 }}
+                          onClick={() => navigate(`/projects/${project._id}?edit=true`)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          startIcon={<Delete />}
+                          color="error"
+                          sx={{ ml: 1 }}
+                          onClick={() => handleDeleteProject(project._id)}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Create Project Dialog */}
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Project</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <TextField
+            fullWidth
+            label="Project Title"
+            name="title"
+            value={formData.title}
+            onChange={handleFormChange}
+            margin="normal"
+            required
+          />
+          <TextField
+            fullWidth
+            label="Description"
+            name="description"
+            value={formData.description}
+            onChange={handleFormChange}
+            margin="normal"
+            multiline
+            rows={4}
+            required
+          />
+          <TextField
+            fullWidth
+            label="Location"
+            name="location"
+            value={formData.location}
+            onChange={handleFormChange}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Budget"
+            name="budget"
+            type="number"
+            value={formData.budget}
+            onChange={handleFormChange}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            select
+            label="Initial Status"
+            name="status"
+            value={formData.status}
+            onChange={handleFormChange}
+            margin="normal"
+            SelectProps={{ native: true }}
+          >
+            <option value="planning">Planning</option>
+            <option value="licensed">Licensed</option>
+            <option value="in_progress">In Progress</option>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCreateProject} variant="contained">
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
 }

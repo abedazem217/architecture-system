@@ -1,91 +1,180 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api from "../services/api";
+import React, { createContext, useState, useEffect, useMemo } from 'react';
+import { authAPI } from '../services/api.js';
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
-
-  const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem("user");
-    try {
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Initialize auth state from localStorage
   useEffect(() => {
-    const t = localStorage.getItem("token");
-    const u = localStorage.getItem("user");
+    const storedToken = localStorage.getItem('auth_token');
+    const storedUser = localStorage.getItem('user_data');
 
-    setToken(t || null);
-
-    try {
-      setUser(u ? JSON.parse(u) : null);
-    } catch {
-      setUser(null);
+    if (storedToken && storedUser) {
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } catch (err) {
+        console.error('Failed to parse stored user:', err);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+      }
     }
-
     setLoading(false);
   }, []);
 
+  /**
+   * Save session to localStorage
+   */
   const saveSession = (data) => {
-    // data expected: { _id, name, email, role, token }
     const sessionUser = {
-      _id: data._id,
-      name: data.name,
-      email: data.email,
-      role: data.role, // ✅ role محفوظ هون
+      _id: data._id || data.user?._id,
+      name: data.name || data.user?.name,
+      email: data.email || data.user?.email,
+      phone: data.phone || data.user?.phone,
+      role: data.role || data.user?.role,
+      profilePic: data.profilePic || data.user?.profilePic,
     };
 
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(sessionUser));
+    const sessionToken = data.token;
 
-    setToken(data.token);
+    localStorage.setItem('auth_token', sessionToken);
+    localStorage.setItem('user_data', JSON.stringify(sessionUser));
+
+    setToken(sessionToken);
     setUser(sessionUser);
+    setError(null);
   };
 
-  const login = async ({ email, password }) => {
-    const res = await api.post("/auth/login", { email, password });
-    saveSession(res.data);
-    return res.data;
+  /**
+   * Register new user
+   */
+  const register = async (formData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await authAPI.register(formData);
+      saveSession(response.data.data);
+      return response.data;
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Registration failed';
+      setError(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const register = async ({ name, email, password }) => {
-    const res = await api.post("/auth/register", { name, email, password });
-    // Auto-login after register
-    saveSession(res.data);
-    return res.data;
+  /**
+   * Login user
+   */
+  const login = async (email, password) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await authAPI.login({ email, password });
+      saveSession(response.data.data);
+      return response.data;
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Login failed';
+      setError(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setToken(null);
-    setUser(null);
+  /**
+   * Logout user
+   */
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      setToken(null);
+      setUser(null);
+      setError(null);
+    }
+  };
+
+  /**
+   * Update user profile
+   */
+  const updateProfile = async (profileData) => {
+    try {
+      setLoading(true);
+      const response = await authAPI.updateProfile(profileData);
+      const updatedUser = response.data.data;
+      setUser(updatedUser);
+      localStorage.setItem('user_data', JSON.stringify(updatedUser));
+      return response.data;
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Profile update failed';
+      setError(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Change password
+   */
+  const changePassword = async (currentPassword, newPassword, confirmPassword) => {
+    try {
+      setLoading(true);
+      const response = await authAPI.changePassword({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+      return response.data;
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Password change failed';
+      setError(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const value = useMemo(
     () => ({
-      token,
       user,
+      token,
       loading,
-      isAuthenticated: !!token,
-      login,
+      error,
+      isAuthenticated: !!token && !!user,
+      isArchitect: user?.role === 'architect',
+      isClient: user?.role === 'client',
+      isAdmin: user?.role === 'admin',
       register,
+      login,
       logout,
+      updateProfile,
+      changePassword,
+      setError,
     }),
-    [token, user, loading]
+    [user, token, loading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
 }
+
+export default AuthContext;
